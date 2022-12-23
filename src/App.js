@@ -3,6 +3,7 @@ import Form from "./components/Form";
 import FilterButton from "./components/FilterButton";
 import Todo from "./components/Todo";
 import { nanoid } from "nanoid";
+import HybridWebView from './hybridwebview/HybridWebView.js';
 
 function usePrevious(value) {
   const ref = useRef();
@@ -21,8 +22,9 @@ const FILTER_MAP = {
 const FILTER_NAMES = Object.keys(FILTER_MAP);
 
 function App(props) {
-  const [tasks, setTasks] = useState(props.tasks);
+  const [tasks, setTasks] = useState([]);
   const [filter, setFilter] = useState("All");
+  const [isLoading, setIsLoading] = useState(true);
 
   function toggleTaskCompleted(id) {
     const updatedTasks = tasks.map((task) => {
@@ -34,11 +36,13 @@ function App(props) {
       }
       return task;
     });
+    HybridWebView.SendInvokeMessageToDotNet("ToggleCompletedTask", [id]);
     setTasks(updatedTasks);
   }
 
   function deleteTask(id) {
     const remainingTasks = tasks.filter((task) => id !== task.id);
+    HybridWebView.SendInvokeMessageToDotNet("DeleteTask", [id]);
     setTasks(remainingTasks);
   }
 
@@ -51,6 +55,7 @@ function App(props) {
       }
       return task;
     });
+    HybridWebView.SendInvokeMessageToDotNet("EditTask", [id, newName]);
     setTasks(editedTaskList);
   }
 
@@ -79,6 +84,7 @@ function App(props) {
 
   function addTask(name) {
     const newTask = { id: "todo-" + nanoid(), name: name, completed: false };
+    HybridWebView.SendInvokeMessageToDotNet("AddTask", [newTask]);
     setTasks([...tasks, newTask]);
   }
 
@@ -88,26 +94,49 @@ function App(props) {
   const listHeadingRef = useRef(null);
   const prevTaskLength = usePrevious(tasks.length);
 
+  window.globalSetData = function(newData)
+  {
+    setIsLoading(false);
+    setTasks(newData);
+    console.log("New data arrived with " + newData.length + " item(s)");
+  };
+
   useEffect(() => {
     if (tasks.length - prevTaskLength === -1) {
       listHeadingRef.current.focus();
     }
+
+    // Start initial data load
+    console.log("Start loading...");
+    HybridWebView.SendInvokeMessageToDotNet("StartTaskLoading");
   }, [tasks.length, prevTaskLength]);
 
-  return (
-    <div className="todoapp stack-large">
-      <Form addTask={addTask} />
-      <div className="filters btn-group stack-exception">{filterList}</div>
-      <h2 id="list-heading" tabIndex="-1" ref={listHeadingRef}>
-        {headingText}
-      </h2>
-      <ul
-        className="todo-list stack-large stack-exception"
-        aria-labelledby="list-heading">
-        {taskList}
-      </ul>
-    </div>
-  );
+
+  //window.setTimeout(function() { setIsLoading(false);}, 2000);
+
+  if (isLoading) {
+    return (
+      <div className="todoapp stack-large">
+        <h2>Loading items...</h2>
+      </div>
+    );
+  }
+  else {
+    return (
+      <div className="todoapp stack-large">
+        <Form addTask={addTask} />
+        <div className="filters btn-group stack-exception">{filterList}</div>
+        <h2 id="list-heading" tabIndex="-1" ref={listHeadingRef}>
+          {headingText}
+        </h2>
+        <ul
+          className="todo-list stack-large stack-exception"
+          aria-labelledby="list-heading">
+          {taskList}
+        </ul>
+      </div>
+    );
+  }
 }
 
 export default App;
